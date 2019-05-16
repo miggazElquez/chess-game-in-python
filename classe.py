@@ -1,8 +1,5 @@
 #coding: utf-8
 
-
-Hello !!!
-
 import random
 import time
 import os
