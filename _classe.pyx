@@ -18,8 +18,6 @@ MULTI = True	#metre à 'False' pour désactiver le multiprocessing (par exemple 
 NB = None 		#Définir le nombre de processus pour l'IA (défaut : 'os.cpu_count()')
 
 
-from . import classe2
-
 """
 Toute la logique du jeu (mouvement des pièces, test d'echec, IA...)
 """
@@ -68,15 +66,11 @@ class Echiquier:
 					self.piece_j2.add(piece)
 
 
-
-
-
-
-	def __getitem__(self,value):
+	def __getitem__(self,int value):
 		"""Permet d'accéder au tableau avec les pièces"""
 		return self.echiquier[value]
 
-	def __setitem__(self,indice,value):
+	def __setitem__(self,int indice,value):
 		"""Permet de modifier le tableau avec les pièces"""
 		self.echiquier[indice] = value
 
@@ -209,8 +203,18 @@ class Echiquier:
 
 
 
+cdef echiquier_getitem(echiquier, i, j):
+	"""Same as 'echiquier[i][j]' but much more fast"""
+	cdef list tab = echiquier.echiquier
+	cdef list ligne = tab[i]
+	return ligne[j]
 
 
+def test(echi,x,y):
+	return echi[x][y]
+
+def test2(echi,x,y):
+	return echiquier_getitem(echi,x,y)
 
 
 
@@ -260,6 +264,7 @@ LETTRE_CHIFFRE = [None,'A','B','C','D','E','F','G','H']
 
 class Piece:
 	"""La base de toutes les pièces"""
+
 	def __init__(self,coord,echiquier,joueur):
 		"""On passe en arguments les coordonnées de la pièce, une référence à l'echiquier sur lequelle elle est, et son joueur"""
 		self.coordonnes = coord
@@ -272,8 +277,8 @@ class Piece:
 			self.echiquier.piece_j1.remove(cible)
 		elif cible.joueur is self.echiquier.j2:
 			self.echiquier.piece_j2.remove(cible)
-		coord = cible.coordonnes
-		y,x = self.coordonnes
+		coord = cible.coordonnes[0],cible.coordonnes[1]
+		y,x = self.coordonnes[0],self.coordonnes[1]
 		t = PieceVide(self.coordonnes,self.echiquier)
 		self.echiquier[y][x] = t
 		self.coordonnes = coord
@@ -281,7 +286,7 @@ class Piece:
 		return t
 
 
-	def liste_mvt(self,echec_non_compris=False):
+	def liste_mvt(self,bint echec_non_compris=False):
 		"""
 		Renvoie un générateur de tuple, sous la forme (Piece_qui_bouge,Piece_tue)
 		Une PieceVide va renvoyer un générateur vides
@@ -392,62 +397,36 @@ class Pion(Piece):
 			pass #TODO
 
 	def _calcul_mvt(self):
+		cdef int y
+		cdef int x
 		y = self.coordonnes[0]
 		x = self.coordonnes[1]
+		cdef int y1
 		y1 = y+1 if self.joueur.couleur else y-1
 		piece = self.echiquier[y1][x]
 		if not piece:
 			yield (self,piece)
 
 		if x <=7:
-			piece = self.echiquier[y1][x+1]
+			piece = echiquier_getitem(self.echiquier,y1,x+1)
 			if piece and piece.joueur is not self.joueur:
 				yield (self,piece)
 		if x >=2:
-			piece = self.echiquier[y1][x-1]
+			piece = echiquier_getitem(self.echiquier,y1,x-1)
 			if piece and piece.joueur is not self.joueur:
 				yield (self,piece)
 
 		if self.joueur.couleur and y == 2:
-			piece = self.echiquier[y+2][x]
-			piece_en_chemin = self.echiquier[y1][x]
+			piece = echiquier_getitem(self.echiquier,y+1,x)
+			piece_en_chemin = echiquier_getitem(self.echiquier,y1,x)
 			if not piece and not piece_en_chemin:
 				yield (self,piece)
 		elif not self.joueur.couleur and y == 7:
-			piece_en_chemin = self.echiquier[y1][x]
-			piece = self.echiquier[y-2][x]
+			piece_en_chemin = echiquier_getitem(self.echiquier,y1, x)
+			piece = echiquier_getitem(self.echiquier,y-2,x)
 			if not piece and not piece_en_chemin:
 				yield (self,piece)
 
-	def _calcul_mvt2(self):
-		echiquier = self.echiquier
-		joueur = self.joueur
-		y = self.coordonnes[0]
-		x = self.coordonnes[1]
-		y1 = y+1 if joueur.couleur else y-1
-		piece = echiquier[y1][x]
-		if not piece:
-			yield (self,piece)
-
-		if x <=7:
-			piece = echiquier[y1][x+1]
-			if piece and piece.joueur is not joueur:
-				yield (self,piece)
-		if x >=2:
-			piece = echiquier[y1][x-1]
-			if piece and piece.joueur is not joueur:
-				yield (self,piece)
-
-		if joueur.couleur and y == 2:
-			piece = echiquier[y+2][x]
-			piece_en_chemin = echiquier[y1][x]
-			if not piece and not piece_en_chemin:
-				yield (self,piece)
-		elif not joueur.couleur and y == 7:
-			piece_en_chemin = echiquier[y1][x]
-			piece = echiquier[y-2][x]
-			if not piece and not piece_en_chemin:
-				yield (self,piece)
 
 
 
@@ -470,28 +449,28 @@ class Tour(Piece):
 		y1 = y+1
 		piece = 0
 		while not piece and y1<=8:
-			piece = self.echiquier[y1][x]
+			piece = echiquier_getitem(self.echiquier,y1,x)
 			if piece.joueur is not self.joueur:
 				yield((self,piece))
 			y1+=1
 		y1=y-1
 		piece = 0
 		while not piece and y1>=1:
-			piece = self.echiquier[y1][x]
+			piece = echiquier_getitem(self.echiquier,y1,x)
 			if piece.joueur is not self.joueur:
 				yield((self,piece))
 			y1 -=1
 		x1  = x+1
 		piece = 0
 		while not piece and x1<=8:
-			piece = self.echiquier[y][x1]
+			piece = echiquier_getitem(self.echiquier,y,x1)
 			if piece.joueur is not self.joueur:
 				yield((self,piece))
 			x1+=1
 		x1 = x-1
 		piece = 0
 		while not piece and x1>=1:
-			piece = self.echiquier[y][x1]
+			piece = echiquier_getitem(self.echiquier,y,x1)
 			if piece.joueur is not self.joueur:
 				yield((self,piece))
 			x1-=1
@@ -501,6 +480,8 @@ class Tour(Piece):
 class Fou(Piece):
 	"""Pas de difs"""
 	def _calcul_mvt(self):
+		cdef int y
+		cdef int x
 		y = self.coordonnes[0]
 		x = self.coordonnes[1]
 		y1 = y+1
@@ -512,29 +493,12 @@ class Fou(Piece):
 				y1 = y+i
 				piece = 0
 				while not piece and y1>=1 and y1<=8 and x1>=1 and x1<=8:
-					piece = self.echiquier[y1][x1]
+					piece = echiquier_getitem(self.echiquier,y1,x1)
 					if piece.joueur is not self.joueur:
 						yield (self,piece)
 					x1+=j
 					y1+=i
-
-	def _calcul_mvt2(self):
-		y = self.coordonnes[0]
-		x = self.coordonnes[1]
-		y1 = y+1
-		x1 = x+1
-		piece = 0
-		for i in range(-1,2,2):
-			for j in range(-1,2,2):
-				x1 = x+j
-				y1 = y+i
-				piece = 0
-				while not piece and y1>=1 and y1<=8 and x1>=1 and x1<=8:
-					piece = self.echiquier[y1][x1]
-					if piece.joueur is not self.joueur:
-						yield ((self,piece))
-					x1+=j
-					y1+=i
+					
 
 class Cavalier(Piece):
 	"""Pas de difs"""
@@ -547,13 +511,13 @@ class Cavalier(Piece):
 				y1 = y + a
 				x1 = x + xx
 				if 1 <= y1 <= 8 and 1 <= x1 <= 8:
-					piece = self.echiquier[y1][x1]
+					piece = echiquier_getitem(self.echiquier,y1,x1)
 					if self.joueur is not piece.joueur:
 						yield (self,piece)
 				y1 = y + xx
 				x1 = x + a
 				if 1 <= y1 <= 8 and 1 <= x1 <= 8:
-					piece = self.echiquier[y1][x1]
+					piece = echiquier_getitem(self.echiquier,y1,x1)
 					if self.joueur is not piece.joueur:
 						yield (self,piece)
 
@@ -561,6 +525,10 @@ class Reine(Piece):
 	"""Pas de difs"""
 
 	def _calcul_mvt(self):
+		cdef int y
+		cdef int x
+		cdef int xx
+		cdef int yy
 		y = self.coordonnes[0]
 		x = self.coordonnes[1]
 		for yy in range(-1,2):
@@ -570,7 +538,7 @@ class Reine(Piece):
 					x1 = x + xx
 					piece = 0
 					while not piece and x1 >=1 and x1<=8 and y1>=1 and y1<=8:
-						piece = self.echiquier[y1][x1]
+						piece = echiquier_getitem(self.echiquier,y1,x1)
 						if piece.joueur is not self.joueur:
 							yield (self,piece)
 						x1+=xx
@@ -598,7 +566,7 @@ class Roi(Piece):
 					x1 = x+xx   
 					y1 = y+yy   
 					if y1>=1 and y1<=8 and x1>=1 and x1<=8: 
-						piece = self.echiquier[y1][x1]
+						piece = echiquier_getitem(self.echiquier,y1,x1)
 						if self.joueur is not piece.joueur: 
 							yield ((self,piece))
 
@@ -638,241 +606,6 @@ def echec_mat(echiquier,couleur):
 				return False
 				
 	return True
-
-
-
-
-
-def IA_decision(echiquier,joueur,func_init = lambda a:None,func_en_cours = lambda a,b:None,func_fin= lambda a:None):
-	"""
-	Calcule le mouvement que doit faire l'IA. On lui passe l'echiquier, le joueur représentant l'IA, ainsi que trois fonctions :
-	La première est appelé au début, et doit avoir un paramètre, le nombre de coup à traiter.
-	La deuxième est appelé après chaque exploration d'une branche de l'arbre, et a comme paramètre le nombre de branches déjà explorées
-	ainsi que le nombre total de branche.
-	La troisième est appellée à la fin, et a comme paramètre le nombre total de coup.
-	Cette fonction renvoit le coup a jouer.
-	"""
-	if __debug__:
-		global X
-		global Y
-		X=0
-		Y=0
-
-	debut = time.time()
-	all_mvt = list(echiquier.get_all_mvt(joueur))
-	func_init(len(all_mvt))
-	if not joueur.difficulte:
-		return random.choice(all_mvt)
-
-
-
-	if MULTI:	#Utilisation du multiprocessing
-		nbr_worker = os.cpu_count() if NB is None else NB
-		valeur = multi.Queue()
-		taches = multi.Queue()
-
-
-		all_mvt_by_coord = [(piece.coordonnes,cible.coordonnes) for piece,cible in all_mvt]
-
-		for indice,coup in enumerate(all_mvt_by_coord):
-			taches.put((indice,coup))
-
-		processes = []
-		args = (echiquier,joueur,taches,valeur)
-		for i in range(nbr_worker):
-			process = multi.Process(target=worker,args=args)
-			process.start()
-			processes.append(process)
-
-
-		if __debug__:cprint('M - go','red')
-		val_max = -1001
-		i=0
-		while 1:
-			if taches.empty():	#Tout ça reboucle 4 fois, mais ça n'a normalement pas d'incidence
-				for process in processes:	#On termine les calculs
-					func_en_cours(i,len(all_mvt))
-					i+=1
-					process.join()
-
-				try:
-					indice,score = valeur.get_nowait()	 #Du coup y'a plus à attendre, si c'est vide c'est que c'est fini
-				except queue.Empty:
-					break
-
-			else:
-				indice,score = valeur.get()
-				func_en_cours(i,len(all_mvt))
-				i+=1
-			if score > val_max:
-				coups_possibles = [all_mvt[indice]]
-				val_max = score
-			elif score == val_max:
-				coups_possibles.append(all_mvt[indice])
-			if __debug__:cprint(f"M - get valeur {indice}",'red')
-		func_fin(len(all_mvt))
-
-	else:	#Pas de multiprocessing
-		val_max = -1001
-		
-		i=0
-		for indice, (piece,cible) in enumerate(all_mvt):
-			temp = echiquier.temp_mvt(piece,cible)
-			if not echec_roi(echiquier,joueur.couleur):
-				score = min_2(echiquier,joueur,joueur.difficulte,val_max,first_step=True)
-				print(f"{indice} : {score}")
-				if score > val_max:
-					coups_possibles = [(piece,cible)]
-					val_max = score
-				elif score==val_max:
-					coups_possibles.append((piece,cible))
-				#if __debug__: print(f"val_max : {val_max}")
-				func_en_cours(i,len(all_mvt))
-				i+=1
-			
-			echiquier.reset_mvt(temp)
-
-		func_fin(len(all_mvt))
-		
-	print(f"Il y avait {len(all_mvt)} coups possible, et on a choisit entre {len(coups_possibles)} coup{'s'*bool(len(coups_possibles))} au hasard.")
-	print(f"Calculé en {time.time()-debut} s")
-	#if __debug__: print(f"({X} échiquiers différents calculés, et {Y} élagages effectués)")
-	print('\n\n')
-	return random.choice(coups_possibles)
-
-
-def worker(echiquier,joueur,taches,valeurs):
-	"""Calcule les valeurs de différents échiquiers, dans un autre process"""
-	r = os.getpid()
-	if __debug__: os.system('color')
-	if __debug__: cprint(f'W {r} - Start','green')
-	while 1:
-		try:
-			indice, (piece,cible) = taches.get_nowait()
-			if __debug__: cprint(f"W {r} - calcul de {indice}",'cyan')
-		except queue.Empty:
-			return
-
-		piece, cible = echiquier.get(*piece),echiquier.get(*cible)
-		temp = echiquier.temp_mvt(piece,cible)
-		if not echec_roi(echiquier,joueur.couleur):
-			score = min_2(echiquier,joueur,joueur.difficulte,-1001,first_step=True)
-		echiquier.reset_mvt(temp)
-		if __debug__:	cprint(f"W {r} - end calcul de {indice}, val = {score}",'cyan')
-		valeurs.put((indice,score))
-
-
-
-
-
-def min_2(echiquier,joueur,profondeur,val_min_possible,first_step=False):
-	#if __debug__:
-	#	global X
-	#	X+=1
-	if echec_mat(echiquier,joueur.couleur):
-		return 1000
-	if echec_mat(echiquier,not(joueur.couleur)):
-		return -1000
-
-	if not profondeur:
-		return echiquier.get_value(joueur)
-
-	val_min = 1001
-
-	for piece in echiquier.get_piece_by_couleur(not joueur.couleur):
-		for piece,cible in piece.liste_mvt():
-			temp = echiquier.temp_mvt(piece,cible)
-			if not echec_roi(echiquier,not joueur.couleur):
-				score = max_2(echiquier,joueur,profondeur-1,val_min)
-				if score < val_min:
-					val_min = score
-			echiquier.reset_mvt(temp)
-			if first_step:	#Dans le first step, on ne cherche pas la valeur la plus forte mais tout les coups qui ont cette valeur.
-				if val_min < val_min_possible:	#On ne peut donc pas couper en cas d'égalité
-					return val_min
-			else:
-				if val_min <= val_min_possible:
-					#if __debug__:
-					#	global Y
-					#	Y+=1
-					return val_min 
-	return val_min
-
-
-
-def max_2(echiquier,joueur,profondeur,val_max_possible):
-	#if __debug__:
-	#	global X
-	#	X+=1
-	if echec_mat(echiquier,joueur.couleur):
-		return 1000
-	if echec_mat(echiquier,not(joueur.couleur)):
-		return -1000
-
-	if not profondeur:
-		return echiquier.get_value(joueur)
-	val_max = -1001
-
-	for piece in echiquier.get_piece_by_joueur(joueur):
-		for piece,cible in piece.liste_mvt():
-			temp = echiquier.temp_mvt(piece,cible)
-			if not echec_roi(echiquier,joueur.couleur):
-				score = min_2(echiquier,joueur,profondeur-1,val_max)
-				if score > val_max:
-					val_max = score
-			echiquier.reset_mvt(temp)
-			if val_max >= val_max_possible:
-				#if __debug__:
-				#	global Y
-				#	Y+=1
-				return val_max
-	return val_max
-
-
-
-
-
-
-
-
-
-
-
-
-def init():
-	"""Créé les objets nécessaires à un début de partie. C'est temporaire"""
-	j1 = Joueur(True,"joueur",difficulte=3)
-	j2 = Joueur(False,difficulte=3,adversaire=j1)
-	x = Echiquier(j1,j2)
-	return j1, j2, x
-
-
-def main_for_profile():
-	j1,j2,x = init()
-	p,c = IA_decision(x,j2)
-	x[7][4] >>x[5][4]
-	p,c = IA_decision(x,j2)
-	p>>c
-
-
-
-def main():
-	import cProfile
-	import pstats
-	with contextlib.redirect_stdout(open(os.devnull,'w')):
-		cProfile.runctx("main_for_profile()",globals(),locals(),'x')
-	stats = pstats.Stats('x')
-	stats.strip_dirs().sort_stats('time').print_stats()	
-
-
-try:
-	from ._classe import *
-except ImportError:
-	print("Cython version not found")	#We will use the pure python version (above)
-
-
-
-if __debug__ : j1,j2,x = init() #c'est vraiment juste pour aller plus vite dans le shell
 
 
 if __name__ == '__main__':
