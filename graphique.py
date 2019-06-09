@@ -213,8 +213,6 @@ def main():
 	DATA.marqueur_rouge.set_colorkey((255,255,255))
 	DATA.marqueur_noir = pg.image.load(path/'marqueur_noir.png').convert()
 	DATA.marqueur_noir.set_colorkey((255,255,255))
-	DATA.cadre = pg.image.load(path/'cadre.png').convert()
-	DATA.cadre.set_colorkey((255,255,255))
 
 	global IMAGE_PIECES
 	IMAGE_PIECES = {}
