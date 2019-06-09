@@ -18,8 +18,6 @@ MULTI = True	#metre à 'False' pour désactiver le multiprocessing (par exemple 
 NB = None 		#Définir le nombre de processus pour l'IA (défaut : 'os.cpu_count()')
 
 
-from . import classe2
-
 """
 Toute la logique du jeu (mouvement des pièces, test d'echec, IA...)
 """
@@ -419,35 +417,7 @@ class Pion(Piece):
 			if not piece and not piece_en_chemin:
 				yield (self,piece)
 
-	def _calcul_mvt2(self):
-		echiquier = self.echiquier
-		joueur = self.joueur
-		y = self.coordonnes[0]
-		x = self.coordonnes[1]
-		y1 = y+1 if joueur.couleur else y-1
-		piece = echiquier[y1][x]
-		if not piece:
-			yield (self,piece)
 
-		if x <=7:
-			piece = echiquier[y1][x+1]
-			if piece and piece.joueur is not joueur:
-				yield (self,piece)
-		if x >=2:
-			piece = echiquier[y1][x-1]
-			if piece and piece.joueur is not joueur:
-				yield (self,piece)
-
-		if joueur.couleur and y == 2:
-			piece = echiquier[y+2][x]
-			piece_en_chemin = echiquier[y1][x]
-			if not piece and not piece_en_chemin:
-				yield (self,piece)
-		elif not joueur.couleur and y == 7:
-			piece_en_chemin = echiquier[y1][x]
-			piece = echiquier[y-2][x]
-			if not piece and not piece_en_chemin:
-				yield (self,piece)
 
 
 
@@ -518,23 +488,7 @@ class Fou(Piece):
 					x1+=j
 					y1+=i
 
-	def _calcul_mvt2(self):
-		y = self.coordonnes[0]
-		x = self.coordonnes[1]
-		y1 = y+1
-		x1 = x+1
-		piece = 0
-		for i in range(-1,2,2):
-			for j in range(-1,2,2):
-				x1 = x+j
-				y1 = y+i
-				piece = 0
-				while not piece and y1>=1 and y1<=8 and x1>=1 and x1<=8:
-					piece = self.echiquier[y1][x1]
-					if piece.joueur is not self.joueur:
-						yield ((self,piece))
-					x1+=j
-					y1+=i
+
 
 class Cavalier(Piece):
 	"""Pas de difs"""

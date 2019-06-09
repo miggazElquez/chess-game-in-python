@@ -417,7 +417,7 @@ class Pion(Piece):
 				yield (self,piece)
 
 		if self.joueur.couleur and y == 2:
-			piece = echiquier_getitem(self.echiquier,y+1,x)
+			piece = echiquier_getitem(self.echiquier,y+2,x)
 			piece_en_chemin = echiquier_getitem(self.echiquier,y1,x)
 			if not piece and not piece_en_chemin:
 				yield (self,piece)
