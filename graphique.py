@@ -1,7 +1,11 @@
 import math
+import argparse
+
 import pygame as pg
 from path import Path
+
 from .classe import *
+from . import classe
 
 
 
@@ -193,6 +197,21 @@ class DATA:
 
 
 def main():
+
+	parser = argparse.ArgumentParser("Chess")
+	parser.add_argument('--multi', type=int, default=-1, help="Number of process to use for the IA. Value of 0 mean no multiprocessing, value of -1 mean default")
+
+	args = parser.parse_args()
+	if args.multi !=-1:
+		if args.multi == 0:
+			classe.MULTI = False
+		else:
+			classe.NB = args.multi
+
+
+
+
+
 	path = Path(__file__).parent/"data"/"images"
 
 	pg.init()
