@@ -1,25 +1,11 @@
 #coding: utf-8
 
-import random
-import time
-import os
-import sys
-import multiprocessing as multi
-import queue
-from pprint import pprint
-import contextlib
-from path import Path
-if __debug__: from termcolor import cprint
-
-
 if __debug__: from .debug import *
 
-MULTI = True	#metre à 'False' pour désactiver le multiprocessing (par exemple pour profiler)
-NB = None 		#Définir le nombre de processus pour l'IA (défaut : 'os.cpu_count()')
 
 
 """
-Toute la logique du jeu (mouvement des pièces, test d'echec, IA...)
+Core logic in cython (run faster)
 """
 
 
@@ -27,12 +13,17 @@ Toute la logique du jeu (mouvement des pièces, test d'echec, IA...)
 
 
 
-class Echiquier:
+cdef class Echiquier:
 	"""Cette classe représente l'echiquier, sous forme d'un tableau de 8 sur 8 (listes imbriquées).
 	On peut accéder à une case en faisant echiquier[x][y].
 	Pour x=0 ou y=0, echiquier[x][y] = None
 	Sinon, cette classe contient des objets Piece()
 	"""
+
+	cdef list echiquier
+	cdef public object j1,j2
+	cdef readonly set piece_j1, piece_j2
+
 	def __init__(self,joueur1,joueur2,fill=True):
 		"""On passe en argument les deux joueurs, puis une liste si il y'en a une de déjà créé (pour une copie).
 		le paramètre 'full' sert en l'absence de 'echiquier' : il détermine si l'échiquier sera généré avec ou sans les pièces dessus"""
@@ -75,15 +66,17 @@ class Echiquier:
 		self.echiquier[indice] = value
 
 	def __iter__(self):
+		cdef i,j
 		for i in range(1,9):
 			for j in range(1,9):
-				yield self[i][j]
+				yield self.get(i,j)
 
-	def get(self,y,x):
-		"""echiquier.get(y,x) est équivalent à echiquier[y][x]"""
-		return self[y][x]
+	def get(self,int y,int x):
+		"""echiquier.get(y,x) est équivalent à echiquier[y][x] (mais plus performant)"""
+		cdef list ligne =  self.echiquier[y]
+		return ligne[x]
 
-	def get_piece_by_joueur(self,joueur):
+	cpdef set get_piece_by_joueur(self,joueur):
 		if joueur is self.j1:
 			return self.piece_j1
 		elif joueur is self.j2:
@@ -91,7 +84,7 @@ class Echiquier:
 		else:
 			raise ValueError("Votre joueur n'existe pas")
 
-	def get_piece_by_couleur(self,couleur):
+	cpdef set get_piece_by_couleur(self,bint couleur):
 		if self.j1.couleur is couleur:
 			return self.piece_j1
 		else:
@@ -99,7 +92,7 @@ class Echiquier:
 
 	def copie(self):
 		"""Crée une copie de l'echiquier : toutes les pièces sont copiés, mais on ne va pas plus profondément
-		(les joueurs des pièces restent les mêmes références"""
+		(les joueurs des pièces restent les mêmes références)"""
 		nvx_echiquier = Echiquier(self.j1,self.j2,fill=False)
 		nvx_echiquier.piece_j1 = set()
 		nvx_echiquier.piece_j2 = set()
@@ -115,8 +108,8 @@ class Echiquier:
 
 
 	def get_value(self,joueur):
-		gentil = 0
-		mechant = 0
+		cdef int gentil = 0
+		cdef int mechant = 0
 		for piece in self.get_piece_by_joueur(joueur):
 			gentil += VALEUR_PIECE[piece.__class__]
 		for piece in self.get_piece_by_couleur(not joueur.couleur):
@@ -203,24 +196,11 @@ class Echiquier:
 
 
 
-cdef echiquier_getitem(echiquier, i, j):
-	"""Same as 'echiquier[i][j]' but much more fast"""
-	cdef list tab = echiquier.echiquier
-	cdef list ligne = tab[i]
-	return ligne[j]
-
-
-def test(echi,x,y):
-	return echi[x][y]
-
-def test2(echi,x,y):
-	return echiquier_getitem(echi,x,y)
-
-
 
 class Joueur:
 	"""Classe représentant le joueur, elle est passé en argument à toute les pièces entre autre
 	On connait son nom, si c'est une IA, sa difficulté..."""
+
 	def __init__(self,couleur,classe = 'IA',nom = '',difficulte = 0,adversaire=None):
 		"""On passe en arguments la couleur (True ou False), le nom (facultatif),et le type de joueur ('IA' ou 'joueur').
 		Si le nom n'est pas renseigné, un nom est choisi aléatoirement"""
@@ -277,10 +257,10 @@ class Piece:
 			self.echiquier.piece_j1.remove(cible)
 		elif cible.joueur is self.echiquier.j2:
 			self.echiquier.piece_j2.remove(cible)
-		coord = cible.coordonnes[0],cible.coordonnes[1]
 		y,x = self.coordonnes[0],self.coordonnes[1]
 		t = PieceVide(self.coordonnes,self.echiquier)
 		self.echiquier[y][x] = t
+		coord = cible.coordonnes
 		self.coordonnes = coord
 		self.echiquier[coord[0]][coord[1]] = self
 		return t
@@ -308,7 +288,7 @@ class Piece:
 
 
 	def __rshift__(self,value):
-		"""On peut utiliser 'self.mvt' en écrivant '>>'"""
+		"""On peut utiliser 'piece.mvt(cible)' en écrivant 'piece >> cible'"""
 		return self.mvt(value)
 
 	@property
@@ -399,31 +379,31 @@ class Pion(Piece):
 	def _calcul_mvt(self):
 		cdef int y
 		cdef int x
-		y = self.coordonnes[0]
-		x = self.coordonnes[1]
+		y,x = self.coordonnes
 		cdef int y1
+		cdef Echiquier echiquier = self.echiquier
 		y1 = y+1 if self.joueur.couleur else y-1
-		piece = self.echiquier[y1][x]
+		piece = echiquier[y1][x]
 		if not piece:
 			yield (self,piece)
 
 		if x <=7:
-			piece = echiquier_getitem(self.echiquier,y1,x+1)
+			piece = echiquier.get(y1,x+1)
 			if piece and piece.joueur is not self.joueur:
 				yield (self,piece)
 		if x >=2:
-			piece = echiquier_getitem(self.echiquier,y1,x-1)
+			piece = echiquier.get(y1,x-1)
 			if piece and piece.joueur is not self.joueur:
 				yield (self,piece)
 
 		if self.joueur.couleur and y == 2:
-			piece = echiquier_getitem(self.echiquier,y+2,x)
-			piece_en_chemin = echiquier_getitem(self.echiquier,y1,x)
+			piece = echiquier.get(y+2,x)
+			piece_en_chemin = echiquier.get(y1,x)
 			if not piece and not piece_en_chemin:
 				yield (self,piece)
 		elif not self.joueur.couleur and y == 7:
-			piece_en_chemin = echiquier_getitem(self.echiquier,y1, x)
-			piece = echiquier_getitem(self.echiquier,y-2,x)
+			piece_en_chemin = echiquier.get(y1, x)
+			piece = echiquier.get(y-2,x)
 			if not piece and not piece_en_chemin:
 				yield (self,piece)
 
@@ -444,33 +424,33 @@ class Tour(Piece):
 
 
 	def _calcul_mvt(self):
-		y = self.coordonnes[0]
-		x = self.coordonnes[1]
+		y,x = self.coordonnes
+		cdef Echiquier echiquier = self.echiquier
 		y1 = y+1
 		piece = 0
 		while not piece and y1<=8:
-			piece = echiquier_getitem(self.echiquier,y1,x)
+			piece = echiquier.get(y1,x)
 			if piece.joueur is not self.joueur:
 				yield((self,piece))
 			y1+=1
 		y1=y-1
 		piece = 0
 		while not piece and y1>=1:
-			piece = echiquier_getitem(self.echiquier,y1,x)
+			piece = echiquier.get(y1,x)
 			if piece.joueur is not self.joueur:
 				yield((self,piece))
 			y1 -=1
 		x1  = x+1
 		piece = 0
 		while not piece and x1<=8:
-			piece = echiquier_getitem(self.echiquier,y,x1)
+			piece = echiquier.get(y,x1)
 			if piece.joueur is not self.joueur:
 				yield((self,piece))
 			x1+=1
 		x1 = x-1
 		piece = 0
 		while not piece and x1>=1:
-			piece = echiquier_getitem(self.echiquier,y,x1)
+			piece = echiquier.get(y,x1)
 			if piece.joueur is not self.joueur:
 				yield((self,piece))
 			x1-=1
@@ -480,10 +460,9 @@ class Tour(Piece):
 class Fou(Piece):
 	"""Pas de difs"""
 	def _calcul_mvt(self):
-		cdef int y
-		cdef int x
-		y = self.coordonnes[0]
-		x = self.coordonnes[1]
+		cdef int y,x,x1,y1,i,j
+		cdef Echiquier echiquier = self.echiquier
+		y,x = self.coordonnes
 		y1 = y+1
 		x1 = x+1
 		piece = 0
@@ -493,7 +472,7 @@ class Fou(Piece):
 				y1 = y+i
 				piece = 0
 				while not piece and y1>=1 and y1<=8 and x1>=1 and x1<=8:
-					piece = echiquier_getitem(self.echiquier,y1,x1)
+					piece = echiquier.get(y1,x1)
 					if piece.joueur is not self.joueur:
 						yield (self,piece)
 					x1+=j
@@ -504,20 +483,20 @@ class Cavalier(Piece):
 	"""Pas de difs"""
 
 	def _calcul_mvt(self):
-		y = self.coordonnes[0]
-		x = self.coordonnes[1]
+		y,x = self.coordonnes
+		cdef Echiquier echiquier = self.echiquier
 		for a in range(-2,3,4):
 			for xx in range(-1,2,2):
 				y1 = y + a
 				x1 = x + xx
 				if 1 <= y1 <= 8 and 1 <= x1 <= 8:
-					piece = echiquier_getitem(self.echiquier,y1,x1)
+					piece = echiquier.get(y1,x1)
 					if self.joueur is not piece.joueur:
 						yield (self,piece)
 				y1 = y + xx
 				x1 = x + a
 				if 1 <= y1 <= 8 and 1 <= x1 <= 8:
-					piece = echiquier_getitem(self.echiquier,y1,x1)
+					piece = echiquier.get(y1,x1)
 					if self.joueur is not piece.joueur:
 						yield (self,piece)
 
@@ -529,8 +508,8 @@ class Reine(Piece):
 		cdef int x
 		cdef int xx
 		cdef int yy
-		y = self.coordonnes[0]
-		x = self.coordonnes[1]
+		y,x = self.coordonnes
+		cdef Echiquier echiquier = self.echiquier
 		for yy in range(-1,2):
 			for xx in range(-1,2):
 				if xx or yy:
@@ -538,7 +517,7 @@ class Reine(Piece):
 					x1 = x + xx
 					piece = 0
 					while not piece and x1 >=1 and x1<=8 and y1>=1 and y1<=8:
-						piece = echiquier_getitem(self.echiquier,y1,x1)
+						piece = echiquier.get(y1,x1)
 						if piece.joueur is not self.joueur:
 							yield (self,piece)
 						x1+=xx
@@ -558,15 +537,16 @@ class Roi(Piece):
                         
 
 	def _calcul_mvt(self,echec=True):
-		y = self.coordonnes[0]  
-		x = self.coordonnes[1]  
+		cdef int y,x,yy,xx
+		y,x = self.coordonnes
+		cdef Echiquier echiquier = self.echiquier
 		for yy in range(-1,2):  
 			for xx in range(-1,2):
 				if xx or yy:    
 					x1 = x+xx   
 					y1 = y+yy   
 					if y1>=1 and y1<=8 and x1>=1 and x1<=8: 
-						piece = echiquier_getitem(self.echiquier,y1,x1)
+						piece = echiquier.get(y1,x1)
 						if self.joueur is not piece.joueur: 
 							yield ((self,piece))
 
@@ -582,7 +562,7 @@ VALEUR_PIECE = {Pion:1,Tour:5,Cavalier:3,Fou:3,Reine:9,Roi:0}
 
 
 
-def echec_roi(echiquier,couleur):
+def echec_roi(Echiquier echiquier,couleur):
 	"""On veut savoir si le joueur est en échec au Roi"""
 	for piece in echiquier.get_piece_by_couleur(not couleur):
 		for _,cible in piece.liste_mvt():
@@ -594,9 +574,7 @@ def echec_roi(echiquier,couleur):
 def echec_mat(echiquier,couleur):
 	"""Renvoie 'True' si le joueur est en pat. Il n'y a échec et mat que si 'echec_roi' vaut 'True' aussi"""
 	for piece in echiquier.get_piece_by_couleur(couleur):
-		liste_mvt = piece.liste_mvt()
-		#print(liste_mvt)
-		for piece,cible in liste_mvt:
+		for piece,cible in piece.liste_mvt():
 			not_echec = False
 			temp = echiquier.temp_mvt(piece,cible)
 			if not echec_roi(echiquier,couleur):
@@ -607,6 +585,3 @@ def echec_mat(echiquier,couleur):
 				
 	return True
 
-
-if __name__ == '__main__':
-	main()

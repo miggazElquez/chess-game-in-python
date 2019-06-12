@@ -7,3 +7,5 @@ debug/*
 *.pyd
 
 _classe.c
+
+classe1.py
