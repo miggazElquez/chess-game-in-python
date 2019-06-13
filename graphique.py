@@ -146,7 +146,7 @@ class JeuNormal:
 
 	def flip(self):
 		fenetre.blit(DATA.echiquier_image,DATA.pos_echiquier)
-		if echec_roi(echiquier,self.joueur_en_cours.couleur):
+		if echiquier.echec_roi(self.joueur_en_cours.couleur):
 			for piece in echiquier:
 				if isinstance(piece,Roi) and piece.joueur is self.joueur_en_cours:
 					y,x = piece.coordonnes

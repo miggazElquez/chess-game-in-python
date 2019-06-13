@@ -150,6 +150,28 @@ cdef class Echiquier:
 		for piece in self.get_piece_by_joueur(joueur):
 			yield from piece.liste_mvt()
 
+	def echec_roi(self,couleur):
+		"""On veut savoir si le joueur est en échec au Roi"""
+		for piece in self.get_piece_by_couleur(not couleur):
+			for _,cible in piece.liste_mvt():
+				if isinstance(cible,Roi):
+					return True
+		return False
+
+
+	def echec_mat(self,couleur):
+		"""Renvoie 'True' si le joueur est en pat. Il n'y a échec et mat que si 'echec_roi' vaut 'True' aussi"""
+		for piece in self.get_piece_by_couleur(couleur):
+			for piece,cible in piece.liste_mvt():
+				not_echec = False
+				temp = self.temp_mvt(piece,cible)
+				if not self.echec_roi(couleur):
+					not_echec = True
+				self.reset_mvt(temp)
+				if not_echec:
+					return False
+		return True
+
 
 	def __repr__(self):
 		"""Uniquement utilisé pour debug"""
@@ -277,7 +299,7 @@ class Piece:
 			for self_,cible in liste_mvt_possible:
 				temp = self.echiquier.temp_mvt(self,cible)
 				t = False
-				if not echec_roi(self.echiquier,self.joueur.couleur):
+				if not self.echiquier.echec_roi(self.joueur.couleur):
 					t = True
 				self.echiquier.reset_mvt(temp)
 				if t:
@@ -562,26 +584,7 @@ VALEUR_PIECE = {Pion:1,Tour:5,Cavalier:3,Fou:3,Reine:9,Roi:0}
 
 
 
-def echec_roi(Echiquier echiquier,couleur):
-	"""On veut savoir si le joueur est en échec au Roi"""
-	for piece in echiquier.get_piece_by_couleur(not couleur):
-		for _,cible in piece.liste_mvt():
-			if isinstance(cible,Roi):
-				return True
-	return False
 
-
-def echec_mat(echiquier,couleur):
-	"""Renvoie 'True' si le joueur est en pat. Il n'y a échec et mat que si 'echec_roi' vaut 'True' aussi"""
-	for piece in echiquier.get_piece_by_couleur(couleur):
-		for piece,cible in piece.liste_mvt():
-			not_echec = False
-			temp = echiquier.temp_mvt(piece,cible)
-			if not echec_roi(echiquier,couleur):
-				not_echec = True
-			echiquier.reset_mvt(temp)
-			if not_echec:
-				return False
 				
-	return True
+
 

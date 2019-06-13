@@ -162,6 +162,28 @@ class Echiquier:
 			yield from piece.liste_mvt()
 
 
+	def echec_roi(self,couleur):
+		"""On veut savoir si le joueur est en échec au Roi"""
+		for piece in self.get_piece_by_couleur(not couleur):
+			for _,cible in piece.liste_mvt():
+				if isinstance(cible,Roi):
+					return True
+		return False
+
+
+	def echec_mat(self,couleur):
+		"""Renvoie 'True' si le joueur est en pat. Il n'y a échec et mat que si 'echec_roi' vaut 'True' aussi"""
+		for piece in self.get_piece_by_couleur(couleur):
+			for piece,cible in piece.liste_mvt():
+				not_echec = False
+				temp = self.temp_mvt(piece,cible)
+				if not self.echec_roi(couleur):
+					not_echec = True
+				self.reset_mvt(temp)
+				if not_echec:
+					return False
+		return True
+
 	def __repr__(self):
 		"""Uniquement utilisé pour debug"""
 		a = ''
@@ -290,7 +312,7 @@ class Piece:
 			for self_,cible in liste_mvt_possible:
 				temp = self.echiquier.temp_mvt(self,cible)
 				t = False
-				if not echec_roi(self.echiquier,self.joueur.couleur):
+				if not self.echiquier.echec_roi(self.joueur.couleur):
 					t = True
 				self.echiquier.reset_mvt(temp)
 				if t:
@@ -568,30 +590,7 @@ VALEUR_PIECE = {Pion:1,Tour:5,Cavalier:3,Fou:3,Reine:9,Roi:0}
 
 
 
-def echec_roi(echiquier,couleur):
-	"""On veut savoir si le joueur est en échec au Roi"""
-	for piece in echiquier.get_piece_by_couleur(not couleur):
-		for _,cible in piece.liste_mvt():
-			if isinstance(cible,Roi):
-				return True
-	return False
 
-
-def echec_mat(echiquier,couleur):
-	"""Renvoie 'True' si le joueur est en pat. Il n'y a échec et mat que si 'echec_roi' vaut 'True' aussi"""
-	for piece in echiquier.get_piece_by_couleur(couleur):
-		liste_mvt = piece.liste_mvt()
-		#print(liste_mvt)
-		for piece,cible in liste_mvt:
-			not_echec = False
-			temp = echiquier.temp_mvt(piece,cible)
-			if not echec_roi(echiquier,couleur):
-				not_echec = True
-			echiquier.reset_mvt(temp)
-			if not_echec:
-				return False
-				
-	return True
 
 
 
@@ -672,7 +671,7 @@ def IA_decision(echiquier,joueur,func_init = lambda a:None,func_en_cours = lambd
 		i=0
 		for indice, (piece,cible) in enumerate(all_mvt):
 			temp = echiquier.temp_mvt(piece,cible)
-			if not echec_roi(echiquier,joueur.couleur):
+			if not echiquier.echec_roi(joueur.couleur):
 				score = min_2(echiquier,joueur,joueur.difficulte,val_max,first_step=True)
 				print(f"{indice} : {score}")
 				if score > val_max:
@@ -709,7 +708,7 @@ def worker(echiquier,joueur,taches,valeurs):
 
 		piece, cible = echiquier.get(*piece),echiquier.get(*cible)
 		temp = echiquier.temp_mvt(piece,cible)
-		if not echec_roi(echiquier,joueur.couleur):
+		if not echiquier.echec_roi(joueur.couleur):
 			score = min_2(echiquier,joueur,joueur.difficulte,-1001,first_step=True)
 		echiquier.reset_mvt(temp)
 		if __debug__:	cprint(f"W {r} - end calcul de {indice}, val = {score}",'cyan')
@@ -723,9 +722,9 @@ def min_2(echiquier,joueur,profondeur,val_min_possible,first_step=False):
 	#if __debug__:
 	#	global X
 	#	X+=1
-	if echec_mat(echiquier,joueur.couleur):
+	if echiquier.echec_mat(joueur.couleur):
 		return 1000
-	if echec_mat(echiquier,not(joueur.couleur)):
+	if echiquier.echec_mat(not(joueur.couleur)):
 		return -1000
 
 	if not profondeur:
@@ -736,7 +735,7 @@ def min_2(echiquier,joueur,profondeur,val_min_possible,first_step=False):
 	for piece in echiquier.get_piece_by_couleur(not joueur.couleur):
 		for piece,cible in piece.liste_mvt():
 			temp = echiquier.temp_mvt(piece,cible)
-			if not echec_roi(echiquier,not joueur.couleur):
+			if not echiquier.echec_roi(not joueur.couleur):
 				score = max_2(echiquier,joueur,profondeur-1,val_min)
 				if score < val_min:
 					val_min = score
@@ -758,9 +757,9 @@ def max_2(echiquier,joueur,profondeur,val_max_possible):
 	#if __debug__:
 	#	global X
 	#	X+=1
-	if echec_mat(echiquier,joueur.couleur):
+	if echiquier.echec_mat(joueur.couleur):		#Y'a un des deux qui est pas possible...
 		return 1000
-	if echec_mat(echiquier,not(joueur.couleur)):
+	if echiquier.echec_mat(not(joueur.couleur)):
 		return -1000
 
 	if not profondeur:
@@ -770,7 +769,7 @@ def max_2(echiquier,joueur,profondeur,val_max_possible):
 	for piece in echiquier.get_piece_by_joueur(joueur):
 		for piece,cible in piece.liste_mvt():
 			temp = echiquier.temp_mvt(piece,cible)
-			if not echec_roi(echiquier,joueur.couleur):
+			if not echiquier.echec_roi(joueur.couleur):
 				score = min_2(echiquier,joueur,profondeur-1,val_max)
 				if score > val_max:
 					val_max = score
