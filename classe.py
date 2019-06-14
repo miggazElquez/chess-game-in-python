@@ -242,12 +242,14 @@ class Joueur:
 		Si le nom n'est pas renseigné, un nom est choisi aléatoirement"""
 		self.couleur = couleur
 		if  not nom:
+			"""
 			path = Path(__file__).parent/'data'/'prenoms.txt'
 			with open(path,'r') as f:
 				lignes = f.readlines()
 				nom = random.choice(lignes)
 				nom = nom[0] + nom[1:].lower()
-				nom = nom[:-1]
+				nom = nom[:-1]"""
+			nom = str(int(couleur))
 
 		self.nom = nom
 		if classe == 'IA':

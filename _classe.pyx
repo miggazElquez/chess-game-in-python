@@ -23,6 +23,7 @@ cdef class Echiquier:
 	cdef list echiquier
 	cdef public object j1,j2
 	cdef readonly set piece_j1, piece_j2
+	cdef readonly list rois
 
 	def __init__(self,joueur1,joueur2,fill=True):
 		"""On passe en argument les deux joueurs, puis une liste si il y'en a une de déjà créé (pour une copie).
@@ -30,12 +31,10 @@ cdef class Echiquier:
 
 		echiquier = [None] + [[None]*9 for i in range(8)]
 		if fill:
-			for i,Class in enumerate(LIGNE_PIECE_FOND[1:]):
-				i+=1
+			for i,Class in enumerate(LIGNE_PIECE_FOND[1:],1):
 				echiquier[1][i] = Class((1,i),self,joueur1)
 				echiquier[8][i] = Class((8,i),self,joueur2)
-			for i,Class in enumerate(LIGNE_PION[1:]):
-				i+=1
+			for i,Class in enumerate(LIGNE_PION[1:],1):
 				echiquier[2][i] = Class((2,i),self,joueur1)
 				echiquier[7][i] = Class((7,i),self,joueur2)
 			for i in range(3,7):
@@ -49,12 +48,17 @@ cdef class Echiquier:
 		#On remplit les sets de pièces, par flemme de réécrire le code au dessus
 		self.piece_j1 = set()
 		self.piece_j2 = set()
+		self.rois = [None,None]
 		for piece in self:
 			if piece:
 				if piece.joueur is joueur1:
 					self.piece_j1.add(piece)
 				else:
 					self.piece_j2.add(piece)
+				
+				if isinstance(piece,Roi):
+					self.rois[piece.joueur.couleur] = piece
+
 
 
 	def __getitem__(self,int value):
@@ -66,7 +70,7 @@ cdef class Echiquier:
 		self.echiquier[indice] = value
 
 	def __iter__(self):
-		cdef i,j
+		cdef int i,j
 		for i in range(1,9):
 			for j in range(1,9):
 				yield self.get(i,j)
@@ -89,6 +93,17 @@ cdef class Echiquier:
 			return self.piece_j1
 		else:
 			return self.piece_j2
+
+
+	def get_piece_who_could_potientially_make_an_echec_au_roi(self,bint couleur):
+		pieces = self.piece_j1 if self.j1.couleur is couleur else self.piece_j2
+		for piece in pieces:
+			if piece.potentiel_echec_au_roi():
+				yield piece
+
+
+
+
 
 	def copie(self):
 		"""Crée une copie de l'echiquier : toutes les pièces sont copiés, mais on ne va pas plus profondément
@@ -152,7 +167,7 @@ cdef class Echiquier:
 
 	def echec_roi(self,couleur):
 		"""On veut savoir si le joueur est en échec au Roi"""
-		for piece in self.get_piece_by_couleur(not couleur):
+		for piece in self.get_piece_who_could_potientially_make_an_echec_au_roi(not couleur):
 			for _,cible in piece.liste_mvt():
 				if isinstance(cible,Roi):
 					return True
@@ -216,48 +231,6 @@ cdef class Echiquier:
 		x = repr(self)
 		return '\n'.join('\t'*indent + i for i in x.split('\n'))
 
-
-
-
-class Joueur:
-	"""Classe représentant le joueur, elle est passé en argument à toute les pièces entre autre
-	On connait son nom, si c'est une IA, sa difficulté..."""
-
-	def __init__(self,couleur,classe = 'IA',nom = '',difficulte = 0,adversaire=None):
-		"""On passe en arguments la couleur (True ou False), le nom (facultatif),et le type de joueur ('IA' ou 'joueur').
-		Si le nom n'est pas renseigné, un nom est choisi aléatoirement"""
-		self.couleur = couleur
-		if  not nom:
-			path = Path(__file__).parent/'data'/'prenoms.txt'
-			with open(path,'r') as f:
-				lignes = f.readlines()
-				nom = random.choice(lignes)
-				nom = nom[0] + nom[1:].lower()
-				nom = nom[:-1]
-
-		self.nom = nom
-		if classe == 'IA':
-			self.nom += ' (bot)'
-			self.difficulte = difficulte
-		self.type = classe
-
-		if adversaire is not None:
-			self.adversaire = adversaire
-			adversaire.adversaire = self
-
-
-	def __repr__(self):
-		"""Renvoie uniquement le nom du joueur"""
-		return self.nom
-
-
-	@property
-	def couleur_p(self):
-		"""Pour savoir la couleur, à des fins d'affichage"""
-		if self.couleur:
-			return 'blanc'
-		else:
-			return 'noir'
 
 
 
@@ -429,6 +402,11 @@ class Pion(Piece):
 			if not piece and not piece_en_chemin:
 				yield (self,piece)
 
+	def potentiel_echec_au_roi(self):
+		y, x = self.coordonnes
+		y_r, x_r = self.echiquier.rois[not self.joueur.couleur].coordonnes
+
+		return abs(x - x_r) < 2 and abs(y - y_r) < 2
 
 
 
@@ -477,6 +455,12 @@ class Tour(Piece):
 				yield((self,piece))
 			x1-=1
 
+	def potentiel_echec_au_roi(self):
+		y,x = self.coordonnes
+		y_r,x_r = self.echiquier.rois[not self.joueur.couleur].coordonnes
+
+		return y == y_r or x == x_r
+
 
 
 class Fou(Piece):
@@ -499,6 +483,11 @@ class Fou(Piece):
 						yield (self,piece)
 					x1+=j
 					y1+=i
+
+	def potentiel_echec_au_roi(self):
+		y, x = self.coordonnes
+		y_r, x_r = self.echiquier.rois[not self.joueur.couleur].coordonnes
+		return abs(y - y_r) == abs(x - x_r)
 					
 
 class Cavalier(Piece):
@@ -521,6 +510,12 @@ class Cavalier(Piece):
 					piece = echiquier.get(y1,x1)
 					if self.joueur is not piece.joueur:
 						yield (self,piece)
+
+	def potentiel_echec_au_roi(self):
+		y, x = self.coordonnes
+		y_r, x_r = self.echiquier.rois[not self.joueur.couleur].coordonnes
+		return {abs(x - x_r), abs(y - y_r)} == {1,2}
+
 
 class Reine(Piece):
 	"""Pas de difs"""
@@ -545,6 +540,14 @@ class Reine(Piece):
 						x1+=xx
 						y1+=yy
 
+	def potentiel_echec_au_roi(self):
+		y, x = self.coordonnes
+		y_r, x_r = self.echiquier.rois[not self.joueur.couleur].coordonnes
+
+		if y == y_r or x == x_r:
+			return True
+		return abs(y - y_r) == abs(x - x_r)
+
 
 class Roi(Piece):
 	"""Echec, on regarde si la pièce à bouger"""
@@ -556,7 +559,7 @@ class Roi(Piece):
 		self.deja_bouger = True
 		return super().mvt(coord)
 		
-                        
+
 
 	def _calcul_mvt(self,echec=True):
 		cdef int y,x,yy,xx
@@ -571,6 +574,12 @@ class Roi(Piece):
 						piece = echiquier.get(y1,x1)
 						if self.joueur is not piece.joueur: 
 							yield ((self,piece))
+
+	def potentiel_echec_au_roi(self):
+		y, x = self.coordonnes
+		y_r, x_r = self.echiquier.rois[not self.joueur.couleur].coordonnes
+
+		return abs(x - x_r) < 2 and abs(y - y_r) < 2
 
 
 
