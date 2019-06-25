@@ -167,9 +167,10 @@ cdef class Echiquier:
 
 	def echec_roi(self,couleur):
 		"""On veut savoir si le joueur est en échec au Roi"""
+		roi = self.rois[not couleur]
 		for piece in self.get_piece_who_could_potientially_make_an_echec_au_roi(not couleur):
 			for _,cible in piece.liste_mvt():
-				if isinstance(cible,Roi):
+				if cible is roi:
 					return True
 		return False
 
@@ -326,7 +327,7 @@ class PieceVide(Piece):
 	Elle n'a pas de liste de mouvement, et elle vaut False"""
 	def __init__(self,coord,echiquier,joueur = None):
 		#if joueur is not None:
-		#    raise ValueError("Une pièce vide n'a pas de joueur")
+		#	raise ValueError("Une pièce vide n'a pas de joueur")
 		super().__init__(coord,echiquier,joueur)
 		self.joueur = None
 	

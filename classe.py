@@ -58,12 +58,15 @@ class Echiquier:
 		#On remplit les sets de pièces, par flemme de réécrire le code au dessus
 		self.piece_j1 = set()
 		self.piece_j2 = set()
+		self.rois = [None,None]
 		for piece in self:
 			if piece:
 				if piece.joueur is joueur1:
 					self.piece_j1.add(piece)
 				else:
 					self.piece_j2.add(piece)
+				if isinstance(piece,Roi):
+					self.rois[piece.joueur.couleur] = piece
 
 
 
@@ -154,7 +157,11 @@ class Echiquier:
 		piece >> piece_vide
 		self[cible.coordonnes[0]][cible.coordonnes[1]] = cible
 
-
+	def get_piece_who_could_potientially_make_an_echec_au_roi(self,couleur):
+		pieces = self.piece_j1 if self.j1.couleur is couleur else self.piece_j2
+		for piece in pieces:
+			if piece.potentiel_echec_au_roi():
+				yield piece
 
 	def get_all_mvt(self,joueur):
 		"""Générateur qui renvoie tout les mouvements 1 à 1"""
@@ -164,7 +171,7 @@ class Echiquier:
 
 	def echec_roi(self,couleur):
 		"""On veut savoir si le joueur est en échec au Roi"""
-		for piece in self.get_piece_by_couleur(not couleur):
+		for piece in self.get_piece_who_could_potientially_make_an_echec_au_roi(not couleur):
 			for _,cible in piece.liste_mvt():
 				if isinstance(cible,Roi):
 					return True
@@ -441,7 +448,11 @@ class Pion(Piece):
 			if not piece and not piece_en_chemin:
 				yield (self,piece)
 
+	def potentiel_echec_au_roi(self):
+		y, x = self.coordonnes
+		y_r, x_r = self.echiquier.rois[not self.joueur.couleur].coordonnes
 
+		return abs(x - x_r) < 2 and abs(y - y_r) < 2
 
 
 
@@ -490,6 +501,11 @@ class Tour(Piece):
 				yield((self,piece))
 			x1-=1
 
+	def potentiel_echec_au_roi(self):
+		y,x = self.coordonnes
+		y_r,x_r = self.echiquier.rois[not self.joueur.couleur].coordonnes
+
+		return y == y_r or x == x_r
 
 
 class Fou(Piece):
@@ -512,6 +528,10 @@ class Fou(Piece):
 					x1+=j
 					y1+=i
 
+	def potentiel_echec_au_roi(self):
+		y, x = self.coordonnes
+		y_r, x_r = self.echiquier.rois[not self.joueur.couleur].coordonnes
+		return abs(y - y_r) == abs(x - x_r)
 
 
 class Cavalier(Piece):
@@ -535,6 +555,13 @@ class Cavalier(Piece):
 					if self.joueur is not piece.joueur:
 						yield (self,piece)
 
+	def potentiel_echec_au_roi(self):
+		y, x = self.coordonnes
+		y_r, x_r = self.echiquier.rois[not self.joueur.couleur].coordonnes
+		return {abs(x - x_r), abs(y - y_r)} == {1,2}
+
+
+
 class Reine(Piece):
 	"""Pas de difs"""
 
@@ -554,6 +581,14 @@ class Reine(Piece):
 						x1+=xx
 						y1+=yy
 
+	def potentiel_echec_au_roi(self):
+		y, x = self.coordonnes
+		y_r, x_r = self.echiquier.rois[not self.joueur.couleur].coordonnes
+
+		if y == y_r or x == x_r:
+			return True
+		return abs(y - y_r) == abs(x - x_r)
+
 
 class Roi(Piece):
 	"""Echec, on regarde si la pièce à bouger"""
@@ -564,8 +599,7 @@ class Roi(Piece):
 	def mvt(self, coord):
 		self.deja_bouger = True
 		return super().mvt(coord)
-		
-                        
+
 
 	def _calcul_mvt(self,echec=True):
 		y = self.coordonnes[0]  
@@ -580,6 +614,11 @@ class Roi(Piece):
 						if self.joueur is not piece.joueur: 
 							yield ((self,piece))
 
+	def potentiel_echec_au_roi(self):
+		y, x = self.coordonnes
+		y_r, x_r = self.echiquier.rois[not self.joueur.couleur].coordonnes
+
+		return abs(x - x_r) < 2 and abs(y - y_r) < 2
 
 
 
@@ -688,7 +727,7 @@ def IA_decision(echiquier,joueur,func_init = lambda a:None,func_en_cours = lambd
 			echiquier.reset_mvt(temp)
 
 		func_fin(len(all_mvt))
-		
+
 	print(f"Il y avait {len(all_mvt)} coups possible, et on a choisit entre {len(coups_possibles)} coup{'s'*bool(len(coups_possibles))} au hasard.")
 	print(f"Calculé en {time.time()-debut} s")
 	#if __debug__: print(f"({X} échiquiers différents calculés, et {Y} élagages effectués)")
@@ -724,10 +763,11 @@ def min_2(echiquier,joueur,profondeur,val_min_possible,first_step=False):
 	#if __debug__:
 	#	global X
 	#	X+=1
-	if echiquier.echec_mat(joueur.couleur):
-		return 1000
+
 	if echiquier.echec_mat(not(joueur.couleur)):
-		return -1000
+		if echiquier.echec_roi(not joueur.couleur):
+			return 1000
+		return 0
 
 	if not profondeur:
 		return echiquier.get_value(joueur)
@@ -759,10 +799,11 @@ def max_2(echiquier,joueur,profondeur,val_max_possible):
 	#if __debug__:
 	#	global X
 	#	X+=1
-	if echiquier.echec_mat(joueur.couleur):		#Y'a un des deux qui est pas possible...
-		return 1000
-	if echiquier.echec_mat(not(joueur.couleur)):
-		return -1000
+	if echiquier.echec_mat(joueur.couleur):
+		if echiquier.echec_roi(joueur.couleur):
+			return -1000
+		return 0
+
 
 	if not profondeur:
 		return echiquier.get_value(joueur)
