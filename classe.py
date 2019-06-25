@@ -764,16 +764,13 @@ def min_2(echiquier,joueur,profondeur,val_min_possible,first_step=False):
 	#	global X
 	#	X+=1
 
-	if echiquier.echec_mat(not(joueur.couleur)):
-		if echiquier.echec_roi(not joueur.couleur):
-			return 1000
-		return 0
+
 
 	if not profondeur:
 		return echiquier.get_value(joueur)
 
 	val_min = 1001
-
+	is_echec_mat = True
 	for piece in echiquier.get_piece_by_couleur(not joueur.couleur):
 		for piece,cible in piece.liste_mvt():
 			temp = echiquier.temp_mvt(piece,cible)
@@ -781,6 +778,7 @@ def min_2(echiquier,joueur,profondeur,val_min_possible,first_step=False):
 				score = max_2(echiquier,joueur,profondeur-1,val_min)
 				if score < val_min:
 					val_min = score
+				is_echec_mat = False
 			echiquier.reset_mvt(temp)
 			if first_step:	#Dans le first step, on ne cherche pas la valeur la plus forte mais tout les coups qui ont cette valeur.
 				if val_min < val_min_possible:	#On ne peut donc pas couper en cas d'égalité
@@ -791,6 +789,11 @@ def min_2(echiquier,joueur,profondeur,val_min_possible,first_step=False):
 					#	global Y
 					#	Y+=1
 					return val_min 
+	if is_echec_mat:
+		if echiquier.echec_roi(not joueur.couleur):
+			return 1000
+		return 0
+
 	return val_min
 
 
@@ -799,16 +802,12 @@ def max_2(echiquier,joueur,profondeur,val_max_possible):
 	#if __debug__:
 	#	global X
 	#	X+=1
-	if echiquier.echec_mat(joueur.couleur):
-		if echiquier.echec_roi(joueur.couleur):
-			return -1000
-		return 0
-
-
+	
 	if not profondeur:
 		return echiquier.get_value(joueur)
 	val_max = -1001
 
+	is_echec_mat = True	#no need to use echiquier.echec_mat() here
 	for piece in echiquier.get_piece_by_joueur(joueur):
 		for piece,cible in piece.liste_mvt():
 			temp = echiquier.temp_mvt(piece,cible)
@@ -816,12 +815,19 @@ def max_2(echiquier,joueur,profondeur,val_max_possible):
 				score = min_2(echiquier,joueur,profondeur-1,val_max)
 				if score > val_max:
 					val_max = score
+				is_echec_mat = False
 			echiquier.reset_mvt(temp)
 			if val_max >= val_max_possible:
 				#if __debug__:
 				#	global Y
 				#	Y+=1
 				return val_max
+
+	if is_echec_mat:
+		if echiquier.echec_roi(joueur.couleur):
+			return -1000
+		return 0
+
 	return val_max
 
 
@@ -837,8 +843,8 @@ def max_2(echiquier,joueur,profondeur,val_max_possible):
 
 def init():
 	"""Créé les objets nécessaires à un début de partie. C'est temporaire"""
-	j1 = Joueur(True,"joueur",difficulte=3)
-	j2 = Joueur(False,difficulte=3,adversaire=j1)
+	j1 = Joueur(True,"joueur",difficulte=4)
+	j2 = Joueur(False,difficulte=4,adversaire=j1)
 	x = Echiquier(j1,j2)
 	return j1, j2, x
 
