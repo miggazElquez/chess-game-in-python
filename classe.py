@@ -664,6 +664,7 @@ def IA_decision(echiquier,joueur,func_init = lambda a:None,func_en_cours = lambd
 		nbr_worker = os.cpu_count() if NB is None else NB
 		valeur = multi.Queue()
 		taches = multi.Queue()
+		val_max_shared = multi.Value('h',-1001)
 
 
 		all_mvt_by_coord = [(piece.coordonnes,cible.coordonnes) for piece,cible in all_mvt]
@@ -672,7 +673,7 @@ def IA_decision(echiquier,joueur,func_init = lambda a:None,func_en_cours = lambd
 			taches.put((indice,coup))
 
 		processes = []
-		args = (echiquier,joueur,taches,valeur)
+		args = (echiquier,joueur,taches,valeur,val_max_shared)
 		for i in range(nbr_worker):
 			process = multi.Process(target=worker,args=args)
 			process.start()
@@ -701,6 +702,8 @@ def IA_decision(echiquier,joueur,func_init = lambda a:None,func_en_cours = lambd
 			if score > val_max:
 				coups_possibles = [all_mvt[indice]]
 				val_max = score
+				val_max_shared.value = val_max
+
 			elif score == val_max:
 				coups_possibles.append(all_mvt[indice])
 			if __debug__:cprint(f"M - get valeur {indice}",'red')
@@ -735,7 +738,7 @@ def IA_decision(echiquier,joueur,func_init = lambda a:None,func_en_cours = lambd
 	return random.choice(coups_possibles)
 
 
-def worker(echiquier,joueur,taches,valeurs):
+def worker(echiquier,joueur,taches,valeurs,val_max):
 	"""Calcule les valeurs de différents échiquiers, dans un autre process"""
 	r = os.getpid()
 	if __debug__: os.system('color')
@@ -750,7 +753,7 @@ def worker(echiquier,joueur,taches,valeurs):
 		piece, cible = echiquier.get(*piece),echiquier.get(*cible)
 		temp = echiquier.temp_mvt(piece,cible)
 		if not echiquier.echec_roi(joueur.couleur):
-			score = min_2(echiquier,joueur,joueur.difficulte,-1001,first_step=True)
+			score = min_2(echiquier,joueur,joueur.difficulte,val_max.value,first_step=True)
 		echiquier.reset_mvt(temp)
 		if __debug__:	cprint(f"W {r} - end calcul de {indice}, val = {score}",'cyan')
 		valeurs.put((indice,score))
