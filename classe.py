@@ -400,8 +400,6 @@ class PieceVide(Piece):
 	def couleur(self):
 		raise TypeError("Une Piece Vide n'a pas de couleur")
 
-	def __hash__(self):
-		return hash((self.coordonnes,self.type))
 
 
 class Pion(Piece):
