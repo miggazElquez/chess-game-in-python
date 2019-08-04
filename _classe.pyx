@@ -97,8 +97,9 @@ cdef class Echiquier:
 
 	def get_piece_who_could_potientially_make_an_echec_au_roi(self,bint couleur):
 		pieces = self.piece_j1 if self.j1.couleur is couleur else self.piece_j2
+		roi_coord = self.rois[not couleur].coordonnes
 		for piece in pieces:
-			if piece.potentiel_echec_au_roi():
+			if piece.potentiel_echec_au_roi(roi_coord):
 				yield piece
 
 
@@ -167,7 +168,7 @@ cdef class Echiquier:
 
 	def echec_roi(self,couleur):
 		"""On veut savoir si le joueur est en échec au Roi"""
-		roi = self.rois[not couleur]
+		roi = self.rois[couleur]
 		for piece in self.get_piece_who_could_potientially_make_an_echec_au_roi(not couleur):
 			for _,cible in piece.liste_mvt():
 				if cible is roi:
@@ -401,9 +402,9 @@ class Pion(Piece):
 			if not piece and not piece_en_chemin:
 				yield (self,piece)
 
-	def potentiel_echec_au_roi(self):
+	def potentiel_echec_au_roi(self, roi_coord):
 		y, x = self.coordonnes
-		y_r, x_r = self.echiquier.rois[not self.joueur.couleur].coordonnes
+		y_r, x_r = roi_coord
 
 		return abs(x - x_r) < 2 and abs(y - y_r) < 2
 
@@ -454,9 +455,9 @@ class Tour(Piece):
 				yield((self,piece))
 			x1-=1
 
-	def potentiel_echec_au_roi(self):
+	def potentiel_echec_au_roi(self, roi_coord):
 		y,x = self.coordonnes
-		y_r,x_r = self.echiquier.rois[not self.joueur.couleur].coordonnes
+		y_r,x_r = roi_coord
 
 		return y == y_r or x == x_r
 
@@ -483,9 +484,9 @@ class Fou(Piece):
 					x1+=j
 					y1+=i
 
-	def potentiel_echec_au_roi(self):
+	def potentiel_echec_au_roi(self,roi_coord):
 		y, x = self.coordonnes
-		y_r, x_r = self.echiquier.rois[not self.joueur.couleur].coordonnes
+		y_r, x_r = roi_coord
 		return abs(y - y_r) == abs(x - x_r)
 					
 
@@ -510,9 +511,9 @@ class Cavalier(Piece):
 					if self.joueur is not piece.joueur:
 						yield (self,piece)
 
-	def potentiel_echec_au_roi(self):
+	def potentiel_echec_au_roi(self,roi_coord):
 		y, x = self.coordonnes
-		y_r, x_r = self.echiquier.rois[not self.joueur.couleur].coordonnes
+		y_r, x_r = roi_coord
 		return {abs(x - x_r), abs(y - y_r)} == {1,2}
 
 
@@ -539,9 +540,9 @@ class Reine(Piece):
 						x1+=xx
 						y1+=yy
 
-	def potentiel_echec_au_roi(self):
+	def potentiel_echec_au_roi(self,roi_coord):
 		y, x = self.coordonnes
-		y_r, x_r = self.echiquier.rois[not self.joueur.couleur].coordonnes
+		y_r, x_r = roi_coord
 
 		if y == y_r or x == x_r:
 			return True
@@ -574,9 +575,9 @@ class Roi(Piece):
 						if self.joueur is not piece.joueur: 
 							yield ((self,piece))
 
-	def potentiel_echec_au_roi(self):
+	def potentiel_echec_au_roi(self, roi_coord):
 		y, x = self.coordonnes
-		y_r, x_r = self.echiquier.rois[not self.joueur.couleur].coordonnes
+		y_r, x_r = roi_coord
 
 		return abs(x - x_r) < 2 and abs(y - y_r) < 2
 
